@@ -32,92 +32,58 @@ class _HomePageState extends State<HomePage> {
   bool isDetecting = false;
   Color buttonColor = Colors.blue;
 
-  FlutterFft flutterFft = FlutterFft();
+  String? note;
+  int? octave;
+  bool? isRecording;
 
-  final double _minFrequency = 3900;
-  final double _maxFrequency = 4100;
+  FlutterFft flutterFft = new FlutterFft();
 
-  Future<void> requestAudioPermission() async {
-    final status = await Permission.microphone.request();
+  _initialize() async {
+    print("Starting recorder...");
+    // print("Before");
+    // bool hasPermission = await flutterFft.checkPermission();
+    // print("After: " + hasPermission.toString());
 
-    if (status == PermissionStatus.granted) {
-      print('Microphone permission granted.');
-    } else if (status == PermissionStatus.denied) {
-      print('Microphone permission denied.');
-      // Consider displaying a message to the user explaining the need for permission
-    } else if (status == PermissionStatus.permanentlyDenied) {
-      print('Microphone permission permanently denied.');
-      // Guide the user to app settings to enable permission
+    // Keep asking for mic permission until accepted
+    while (!(await flutterFft.checkPermission())) {
+      flutterFft.requestPermission();
+      // IF DENY QUIT PROGRAM
     }
-  }
 
-  void _startDetection() async {
-    try {
-      await requestAudioPermission();
+    // await flutterFft.checkPermissions();
+    await flutterFft.startRecorder();
+    print("Recorder started...");
+    setState(() => isRecording = flutterFft.getIsRecording);
 
-      await flutterFft.startRecorder();
-      setState(() {
-        isDetecting = true;
-        print("$isDetecting");
-        buttonColor = Colors.red;
-      });
-    } catch (error) {
-      print("Error starting detection: ${error.toString()}");
-    }
-  }
-
-  void _stopDetection() async {
-    await flutterFft.stopRecorder();
-    setState(() {
-      isDetecting = false;
-      buttonColor = Colors.blue;
-    });
-  }
-
-  void _updateMessageBoxColor() {
-    if (frequency != null &&
-        frequency! >= _minFrequency &&
-        frequency! <= _maxFrequency) {
-      setState(() => messageBoxColor = Colors.green);
-    } else {
-      setState(() => messageBoxColor = Colors.red);
-    }
+    flutterFft.onRecorderStateChanged.listen(
+        (data) => {
+              print("Changed state, received: $data"),
+              setState(
+                () => {
+                  frequency = data[1] as double,
+                  note = data[2] as String,
+                  octave = data[5] as int,
+                },
+              ),
+              flutterFft.setNote = note!,
+              flutterFft.setFrequency = frequency!,
+              flutterFft.setOctave = octave!,
+              print("Octave: ${octave!.toString()}")
+            },
+        onError: (err) {
+          print("Error: $err");
+        },
+        onDone: () => {print("Isdone")});
   }
 
   @override
   void initState() {
-    _initialize();
+    isRecording = flutterFft.getIsRecording;
+    frequency = flutterFft.getFrequency;
+    note = flutterFft.getNote;
+    octave = flutterFft.getOctave;
     super.initState();
-  }
-
-  void _initialize() async {
-    // Request audio permission
-    await requestAudioPermission();
-
-    // Initialize the recorder
-    try {
-      await flutterFft.startRecorder();
-      print("Recorder started successfully.");
-    } catch (error) {
-      print("Error starting recorder: ${error.toString()}");
-      // Handle the error appropriately, potentially informing the user
-    }
-
-    // Set up the listener for recorder state changes
-    flutterFft.onRecorderStateChanged.listen(
-      (data) {
-        // Extract frequency data
-        frequency = data[1] as double;
-
-        // Update message box color based on frequency range
-        _updateMessageBoxColor();
-      },
-      onError: (err) {
-        print("Error: $err");
-        // Handle errors as needed
-      },
-      onDone: () => print("Recorder stopped"),
-    );
+    _initialize();
   }
 
   @override
@@ -215,16 +181,35 @@ class _HomePageState extends State<HomePage> {
           SizedBox(
             height: 50,
           ),
-          MaterialButton(
-            color: buttonColor,
-            child: Text(isDetecting ? "Stop Detection" : "Start Detection"),
-            onPressed: () async {
-              if (isDetecting) {
-                _stopDetection();
-              } else {
-                _startDetection();
-              }
-            },
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                isRecording!
+                    ? Column(
+                        children: [
+                          Container(
+                            height: 50,
+                            width: 200,
+                            decoration: BoxDecoration(
+                                color: frequency! >= 3900 && frequency! <= 4100
+                                    ? Colors.green
+                                    : Colors.red,
+                                borderRadius: BorderRadius.circular(20)),
+                            child: Center(
+                              child: Text(
+                                  "Current frequency: ${frequency!.toStringAsFixed(2)}",
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text("Not Recording", style: TextStyle(fontSize: 35))
+              ],
+            ),
           ),
         ],
       ),
